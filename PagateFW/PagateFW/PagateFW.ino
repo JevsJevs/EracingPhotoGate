@@ -9,72 +9,75 @@ ______                     _         ______  _    _
              |___/                                  
 */
 
-/*Variável input Fototransistor com divisor de tensao de 1kΩ
-
-Leituras analógicas de 0 - 471
-Entendimento de interrupção:
--Interrupção = Sinal al < 200
--Sem obstrução = Sinal al > 200
-*/
+//Device Input Variable -> As of now a photoresistor with 1kΩ potential divider
 int inputLuz = A3;
 
-/*Inicio do timer->
-Possível uso para sincronização com outras unidades
-*/
-unsigned int startTime;
+//Object to measure length
+double objLength;
 
-//Variavel para armazenar o comprimento do corpo que está sendo aferido
-double comprimObjeto;
 
-//Variaveis para controle de tempo inicial, final e Δt
-double intervaloInterrupcao;
-unsigned int inicioInterrupcao;
-unsigned int fimInterrupcao;
+//Lap Measuring Variables
+ int lapCounter = 1;
+ double lapStart;
 
-//Variavel para determinar se o estado atual é interrompido, ou seja, tem algum objeto interrompendo o photogate
-bool isInterrupted;
+//Variables for Initial and final time control and Δt
+ double timeInterval;
+ unsigned int passthroughStart;
+ double passthroughEnd;
+
+//State Variables to detect interruption on light sensor and first start
+bool isInterrupted = false;
+bool raceStart = false;
 
 void setup()
 {
   pinMode(inputLuz, INPUT);
+
+  objLength = 0.1;
   
-  //Para sincronizar: utilizar um 
-  startTime = millis();
-  
-  isInterrupted = false;
-  //Comprim Obj em m -> sequencia de calibragem
-  comprimObjeto = 0.1;
-  
-  //output em console
   Serial.begin(9600);
 }
+
+void outputLapStatsAndSpeed(double avgSpeed, double lapTime, unsigned int lapCounter){
+  //Output lap data -> lapNumber|lapTime|InstantSpeed
+  Serial.print(String(lapCounter)+",");
+  Serial.print(String(lapTime, 3)+",");
+  Serial.println(String(3.6 * avgSpeed, 2));
+}
+
+double calculateInstantSpeed(double objLength, double passthroughStart, double passthroughEnd){
+  //Avarage Speed [Instant] = Δs/Δt | [m]/[s] 	
+  double timeInterval = (passthroughEnd - passthroughStart);
+  return objLength / (timeInterval / 1000);
+}
+
 
 void loop()
 {  
   if(analogRead(inputLuz) < 200 && !isInterrupted){
-  	inicioInterrupcao = millis();
+  	passthroughStart = millis();
     isInterrupted = true;
   }
   
   if(analogRead(inputLuz) > 200 && isInterrupted){
-    fimInterrupcao = millis();
+    if(!raceStart){
+      lapStart = millis();
+      raceStart = true;
+    }
 
- 	  //Velocidade media [Instantânea] = Δs/Δt | [m]/[s] 	
-    intervaloInterrupcao = (fimInterrupcao - inicioInterrupcao);
-    double velocidadeMedFim = comprimObjeto / (intervaloInterrupcao / 1000);
-    
-    Serial.println("==============================================================");
-    Serial.println("Velocidade aferida: "
-                   + String(velocidadeMedFim, 2) + "m/s" +
-                  " | " + String(3.6 *velocidadeMedFim, 2) + "Km/h");
+    passthroughEnd = millis();
+ 	  
+    double avgSpeed = calculateInstantSpeed(objLength, passthroughStart, passthroughEnd);
+    double lapTime = (passthroughEnd - lapStart)/1000;
 
-    Serial.println("\t\tTempo Final" + String(fimInterrupcao, 4) + " | Tempo Inicio" + String(inicioInterrupcao, 4));
-    Serial.println("\t\tTempo Intervalo em ms" + String(intervaloInterrupcao, 4));
-    Serial.print("==============================================================");
+    outputLapStatsAndSpeed(avgSpeed, lapTime, lapCounter);
+
+    lapCounter++;
+    lapStart = passthroughEnd;
     
     isInterrupted = false;
-    inicioInterrupcao = 0;
-    fimInterrupcao = 0; 
-    intervaloInterrupcao = 0;
+    passthroughStart = 0;
+    passthroughEnd = 0; 
+    timeInterval = 0;
   }
 }
